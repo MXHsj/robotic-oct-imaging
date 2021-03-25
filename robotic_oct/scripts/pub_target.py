@@ -30,6 +30,10 @@ def pub_pose():
         reg2_pub.publish(reg2_msg)
         reg3_pub.publish(reg3_msg)
         reg4_pub.publish(reg4_msg)
+        reg5_pub.publish(reg5_msg)
+        reg6_pub.publish(reg6_msg)
+        reg7_pub.publish(reg7_msg)
+        reg8_pub.publish(reg8_msg)
 
 
 def convert2base(T_cam_tar):
@@ -49,10 +53,8 @@ def calc_pose(point_x, point_y, point_z):
         P0 = [point_x[0], point_y[0], point_z[0]]
         Vz = [point_x[-1], point_y[-1], point_z[-1]]
         # x component
-        # xx = math.cos(math.pi/6)                            # 1.0
-        # yx = math.sin(math.pi/6)*math.cos(math.pi/8)        # 0.0
-        xx = 1.0
-        yx = 0.0
+        xx = 0.0
+        yx = -1.0
         zx = -(Vz[1]*(yx-P0[1])+Vz[0]*(xx-P0[0]))/Vz[2]+P0[2]
         Vx = np.subtract([xx, yx, zx], P0)
         Vx = my_floor(Vx/np.linalg.norm(Vx), 3)
@@ -149,23 +151,23 @@ def my_floor(a, precision=0):
 
 # ---------------------constant transformations-----------------------------
 # transformation from base to eef
-# (data recorded at home pose, for debug purpose)
-T_O_ee = np.array([[-0.02406, -0.9997, -0.0001, 0.0],
-                   [-0.999, 0.02405, -0.0275, 0.0],
-                   [0.02751, -0.00055, -0.9996, 0.0],
-                   [0.26308, 0.025773, 0.2755, 1.0]]).transpose()
+# robotic oct
+T_O_ee = np.array([[0.9998, 0.0056, -0.0170, 0.5497],
+                   [0.0053, -0.9998, -0.0180, -0.0336],
+                   [-0.0171, 0.0179, -0.9997, 0.4485],
+                   [0, 0, 0, 1.0]])
 # T_O_ee = None
 
 # transformation from custom eef to camera [m]
-# with US transducer
+# without US transducer
 # T_ee_cam = np.array([[1.000, 0.0, 0.0, -0.0175],
 #                      [0.0, 0.9239, -0.3827, -0.0886180],
-#                      [0.0, 0.3827, 0.9239, -0.3233572],
+#                      [0.0, 0.3827, 0.9239, -0.0933572],
 #                      [0.0, 0.0, 0.0, 1.0]])
-# without US transducer
-T_ee_cam = np.array([[1.000, 0.0, 0.0, -0.0175],
-                     [0.0, 0.9239, -0.3827, -0.0886180],
-                     [0.0, 0.3827, 0.9239, -0.0933572],
+# with new eef
+T_ee_cam = np.array([[0.0, -1.0, 0.0, -0.116],
+                     [1.0, 0.0, 0.0, -0.037],
+                     [0.0, 0.0, 1.0, 0.0],
                      [0.0, 0.0, 0.0, 1.0]])
 
 # --------------------------------------------------------------------------
@@ -185,6 +187,22 @@ reg3_msg.data = float('nan')*np.ones([1, 12]).flatten()
 reg4_pub = rospy.Publisher('reg4_target', Float64MultiArray, queue_size=1)
 reg4_msg = Float64MultiArray()
 reg4_msg.data = float('nan')*np.ones([1, 12]).flatten()
+
+reg5_pub = rospy.Publisher('reg5_target', Float64MultiArray, queue_size=1)
+reg5_msg = Float64MultiArray()
+reg5_msg.data = float('nan')*np.ones([1, 12]).flatten()
+
+reg6_pub = rospy.Publisher('reg6_target', Float64MultiArray, queue_size=1)
+reg6_msg = Float64MultiArray()
+reg6_msg.data = float('nan')*np.ones([1, 12]).flatten()
+
+reg7_pub = rospy.Publisher('reg7_target', Float64MultiArray, queue_size=1)
+reg7_msg = Float64MultiArray()
+reg7_msg.data = float('nan')*np.ones([1, 12]).flatten()
+
+reg8_pub = rospy.Publisher('reg8_target', Float64MultiArray, queue_size=1)
+reg8_msg = Float64MultiArray()
+reg8_msg.data = float('nan')*np.ones([1, 12]).flatten()
 
 key_cmd_pub = rospy.Publisher('keyboard_cmd', Int16, queue_size=1)
 key_cmd_msg = Int16()
@@ -313,7 +331,15 @@ def main():
                     reg3_msg.data = tar_packed
                 elif tar_count == 4:
                     reg4_msg.data = tar_packed
-                tar_count = tar_count + 1 if tar_count < 4 else 1
+                elif tar_count == 5:
+                    reg5_msg.data = tar_packed
+                elif tar_count == 6:
+                    reg6_msg.data = tar_packed
+                elif tar_count == 7:
+                    reg7_msg.data = tar_packed
+                elif tar_count == 8:
+                    reg8_msg.data = tar_packed
+                tar_count = tar_count + 1 if tar_count < 8 else 1
             elif key == ord('e'):
                 print('stop updating')
                 isRecoding = False
@@ -323,6 +349,10 @@ def main():
                 reg2_msg.data = float('nan')*np.ones([1, 12]).flatten()
                 reg3_msg.data = float('nan')*np.ones([1, 12]).flatten()
                 reg4_msg.data = float('nan')*np.ones([1, 12]).flatten()
+                reg5_msg.data = float('nan')*np.ones([1, 12]).flatten()
+                reg6_msg.data = float('nan')*np.ones([1, 12]).flatten()
+                reg7_msg.data = float('nan')*np.ones([1, 12]).flatten()
+                reg8_msg.data = float('nan')*np.ones([1, 12]).flatten()
                 tar_count = 1
 
             elif key == ord('w'):
