@@ -1,10 +1,11 @@
-function visualize_trajectory(T)
+function visualize_waypoints(T)
 
 rotations = tform2quat(T);
 translations = tform2trvec(T);
 figure
 plotTransforms(translations,rotations,'FrameSize',0.008)
 grid on
+axis equal
 xlabel('X [mm]')
 ylabel('Y [mm]')
 zlabel('Z [mm]')
