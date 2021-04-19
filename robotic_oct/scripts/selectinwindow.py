@@ -98,6 +98,12 @@ class DragRectangle:
         if newImg is not None:
             self.image = newImg
 
+    def resetRec(self):
+        self.outRect.x = 0
+        self.outRect.y = 0
+        self.outRect.w = 0
+        self.outRect.h = 0
+
 
 def dragrect(event, x, y, flags, dragObj):
     if x < dragObj.keepWithin.x:
