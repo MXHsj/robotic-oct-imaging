@@ -1,8 +1,8 @@
 #! /usr/bin/env python3
 '''
-motion planner for pure translational OCT scan
-this is just a test case
+calibrate OCT probe orientation
 '''
+import csv
 import rospy
 import numpy as np
 from std_msgs.msg import Int16
@@ -15,13 +15,16 @@ class TranslationalScan():
     T_O_ee = None       # T base to eef
     T_O_tar = None      # T base to target
     T_cam_tar = None    # T realsense to target
+    isContact = False
     in_plane_rot_err = None
     last_in_plane_rot_err = None
     surf_height_ratio = None      # target surface height
     out_of_plane_slope = None
     OCT_clk_ctrl_msg = Int16()
     vel_msg = Float64MultiArray()
-    vel_msg.data = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    pos_msg = Float64MultiArray()
+    vel_msg.data = [0.0]*6
+    pos_msg.data = [0.0]*12
 
     def __init__(self):
         # initialize ROS node
@@ -32,14 +35,12 @@ class TranslationalScan():
         rospy.Subscriber('OCT_img_fb', Float64MultiArray,
                          self.OCT_img_callback)
         # publisher
-        tar_pub = rospy.Publisher(
-            'target_pose', Float64MultiArray, queue_size=1)
         OCT_clk_ctrl_pub = rospy.Publisher(
             'OCT_clk_ctrl', Int16, queue_size=50)
         vel_pub = rospy.Publisher(
             'franka_cmd_vel', Float64MultiArray, queue_size=1)
-        # pos_pub = rospy.Publisher(
-        #     'franka_pos_vel', Float64MultiArray, queue_size=1)
+        pos_pub = rospy.Publisher(
+            'franka_cmd_pos', Float64MultiArray, queue_size=1)
 
         print("connecting to OCT desktop ...")
         while self.T_O_ee is None or self.surf_height_ratio is None:
@@ -47,23 +48,40 @@ class TranslationalScan():
         print("robot state received \nconnection establised")
 
         rate = rospy.Rate(1000)
+        T_O_tar = np.array([[1.0, 0.0, 0.0, 0.45],
+                            [0.0, -1.0, 0.0, 0.0],
+                            [0.0, 0.0, -1.0, 0.075],
+                            [0.0, 0.0, 0.0, 1.0]])
+        while not rospy.is_shutdown():  # go to entry pose
+            self.pos_msg.data = T_O_tar[:3, :4].transpose().flatten()
+            T_error = np.subtract(T_O_tar, self.T_O_ee)
+            trans_error = T_error[0:3, 3]
+            rot_error = T_error[0:3, 0:3].flatten()
+            isReachedTrans = True if sum(
+                [abs(err) < 0.0005 for err in trans_error]) == len(trans_error) else False
+            isReachedRot = True if sum(
+                [abs(err) < 0.1 for err in rot_error]) == len(rot_error) else False
+            if isReachedRot and isReachedTrans:
+                print('reached entry pose')
+                break
+            pos_pub.publish(self.pos_msg)
+            rate.sleep()
+
         while not rospy.is_shutdown():  # landing
             # vz = -kp*(desired_surf_height-surf_height_ratio)
-            self.vel_msg.data[2] = -0.001*(0.7-self.surf_height_ratio)
-            if self.surf_height_ratio >= 0.7:
+            self.vel_msg.data[2] = -0.001*(0.65-self.surf_height_ratio)
+            if self.surf_height_ratio >= 0.65:
                 print('start scanning')
                 break
             vel_pub.publish(self.vel_msg)
             rate.sleep()
 
         self.OCT_clk_ctrl_msg.data = 1
-        while not rospy.is_shutdown():
+        while not rospy.is_shutdown():  # scan
             OCT_clk_ctrl_pub.publish(self.OCT_clk_ctrl_msg)
             vel_pub.publish(self.vel_msg)
-            self.vel_msg.data[0] = 0.0002
-            self.vel_msg.data[2] = -2e-3*(0.7-self.surf_height_ratio)
-            if self.T_O_ee[0, 3] >= 0.45:
-                break
+            self.vel_msg.data[2] = -0.001*(0.65-self.surf_height_ratio)
+            self.vel_msg.data[3] = 0.006*self.in_plane_rot_err
             rate.sleep()
 
         print('finish scan')

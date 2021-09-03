@@ -19,8 +19,8 @@ config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
 # profile = pipeline.start(config)
 # depth_sensor = profile.get_device().first_depth_sensor()
 # depth_scale = depth_sensor.get_depth_scale()
-pipeline.start(config)
 align = rs.align(rs.stream.color)
+pipeline.start(config)
 
 # depth filter
 hole_filling = rs.hole_filling_filter()

@@ -10,7 +10,6 @@ from std_msgs.msg import Int16
 from std_msgs.msg import Bool
 from franka_msgs.msg import FrankaState
 from std_msgs.msg import Float64MultiArray
-from geometry_msgs.msg import WrenchStamped
 
 
 class TranslationalScan():
@@ -24,9 +23,9 @@ class TranslationalScan():
     out_of_plane_slope = None
     OCT_clk_ctrl_msg = Int16()
     vel_msg = Float64MultiArray()
-    # pos_msg = Float64MultiArray()
-    vel_msg.data = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-    eef_wrench_msg = WrenchStamped()
+    pos_msg = Float64MultiArray()
+    vel_msg.data = [0.0]*6
+    pos_msg.data = [0.0]*12
 
     def __init__(self):
         # initialize ROS node
@@ -34,44 +33,57 @@ class TranslationalScan():
         # subscriber
         rospy.Subscriber("franka_state_controller/franka_states",
                          FrankaState, self.ee_callback)
-        rospy.Subscriber('franka_state_controller/F_ext',
-                         WrenchStamped, self.force_callback)
         rospy.Subscriber('OCT_img_fb', Float64MultiArray,
                          self.OCT_img_callback)
         # publisher
-        tar_pub = rospy.Publisher(
-            'target_pose', Float64MultiArray, queue_size=1)
-        op_pub = rospy.Publisher('isContact', Bool, queue_size=1)
         OCT_clk_ctrl_pub = rospy.Publisher(
             'OCT_clk_ctrl', Int16, queue_size=50)
         vel_pub = rospy.Publisher(
             'franka_cmd_vel', Float64MultiArray, queue_size=1)
-        # pos_pub = rospy.Publisher(
-        #     'franka_pos_vel', Float64MultiArray, queue_size=1)
+        pos_pub = rospy.Publisher(
+            'franka_cmd_pos', Float64MultiArray, queue_size=1)
 
         print("connecting to OCT desktop ...")
         while self.T_O_ee is None or self.surf_height_ratio is None:
             pass    # wait for messages are received
         print("robot state received \nconnection establised")
 
-        Fz_d = 1.0 + 1.0 + self.eef_wrench_msg.wrench.force.z
         rate = rospy.Rate(1000)
+        T_O_tar = np.array([[1.0, 0.0, 0.0, 0.43],
+                            [0.0, -1.0, 0.0, 0.0],
+                            [0.0, 0.0, -1.0, 0.205],
+                            [0.0, 0.0, 0.0, 1.0]])
+        while not rospy.is_shutdown():  # go to entry pose
+            self.pos_msg.data = T_O_tar[:3, :4].transpose().flatten()
+            T_error = np.subtract(T_O_tar, self.T_O_ee)
+            trans_error = T_error[0:3, 3]
+            rot_error = T_error[0:3, 0:3].flatten()
+            isReachedTrans = True if sum(
+                [abs(err) < 0.0006 for err in trans_error]) == len(trans_error) else False
+            isReachedRot = True if sum(
+                [abs(err) < 0.3 for err in rot_error]) == len(rot_error) else False
+            if isReachedRot and isReachedTrans:
+                print('reached entry pose')
+                break
+            pos_pub.publish(self.pos_msg)
+            rate.sleep()
+
         while not rospy.is_shutdown():  # landing
             # vz = -kp*(desired_surf_height-surf_height_ratio)
-            self.vel_msg.data[2] = -0.001*(0.7-self.surf_height_ratio)
-            if self.surf_height_ratio >= 0.7:
+            self.vel_msg.data[2] = -0.001*(0.65-self.surf_height_ratio)
+            if self.surf_height_ratio >= 0.65:
                 print('start scanning')
                 break
             vel_pub.publish(self.vel_msg)
             rate.sleep()
 
         self.OCT_clk_ctrl_msg.data = 1
-        while not rospy.is_shutdown():
+        while not rospy.is_shutdown():  # scan
             OCT_clk_ctrl_pub.publish(self.OCT_clk_ctrl_msg)
             vel_pub.publish(self.vel_msg)
-            self.vel_msg.data[0] = 0.0002
-            self.vel_msg.data[2] = -2e-3*(0.7-self.surf_height_ratio)
-            if self.T_O_ee[0, 3] >= 0.45:
+            self.vel_msg.data[0] = 0.0001  # [m/s]
+            self.vel_msg.data[2] = -2e-3*(0.65-self.surf_height_ratio)
+            if self.T_O_ee[0, 3] >= T_O_tar[0, 3] + 5e-3:
                 break
             rate.sleep()
 
@@ -97,9 +109,6 @@ class TranslationalScan():
         EE_pos = msg.O_T_EE_d  # inv 4x4 matrix
         self.T_O_ee = np.array([EE_pos[0:4], EE_pos[4:8], EE_pos[8:12],
                                 EE_pos[12:16]]).transpose()
-
-    def force_callback(self, msg):
-        self.eef_wrench_msg = msg
 
     def cam_tar_callback(self, msg):
         cam_tar = list(msg.data)
