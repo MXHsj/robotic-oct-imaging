@@ -15,8 +15,7 @@ from std_msgs.msg import Bool
 def ee_callback(msg):
     EE_pos = msg.O_T_EE_d  # inv 4x4 matrix
     global T_O_ee
-    T_O_ee = np.array([EE_pos[0:4], EE_pos[4:8], EE_pos[8:12],
-                       EE_pos[12:16]]).transpose()
+    T_O_ee = np.array([EE_pos[0:4], EE_pos[4:8], EE_pos[8:12], EE_pos[12:16]]).transpose()
 
 
 def OCT_clk_ctrl_callback(msg):
@@ -29,10 +28,8 @@ def force_callback(msg):
     Fz = msg.wrench.force.z
 
 
-rospy.Subscriber('franka_state_controller/franka_states',
-                 FrankaState, ee_callback)
-rospy.Subscriber('/franka_state_controller/F_ext',
-                 WrenchStamped, force_callback)
+rospy.Subscriber('franka_state_controller/franka_states', FrankaState, ee_callback)
+rospy.Subscriber('/franka_state_controller/F_ext', WrenchStamped, force_callback)
 rospy.Subscriber('OCT_clk_ctrl', Int16, OCT_clk_ctrl_callback)
 
 T_O_ee = None
@@ -45,7 +42,7 @@ def main():
     path2file = '/home/xihan/catkin_ws/src/robotic_oct/scripts/robot_data_log.csv'
     file_out = open(path2file, 'w')
     writer = csv.writer(file_out)
-    freq = 20
+    freq = 30
     rate = rospy.Rate(freq)
     print('start recording.')
     while not rospy.is_shutdown():
