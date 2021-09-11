@@ -32,28 +32,29 @@ class TranslationalScan():
         rospy.Subscriber("franka_state_controller/franka_states", FrankaState, self.ee_callback)
         rospy.Subscriber('OCT_img_fb', Float64MultiArray, self.OCT_img_callback)
         # publisher
-        OCT_clk_ctrl_pub = rospy.Publisher('OCT_clk_ctrl', Int8, queue_size=50)
-        vel_pub = rospy.Publisher('franka_cmd_vel', Float64MultiArray, queue_size=1)
-        pos_pub = rospy.Publisher('franka_cmd_pos', Float64MultiArray, queue_size=1)
+        self.OCT_clk_ctrl_pub = rospy.Publisher('OCT_clk_ctrl', Int8, queue_size=50)
+        self.vel_pub = rospy.Publisher('franka_cmd_vel', Float64MultiArray, queue_size=1)
+        self.pos_pub = rospy.Publisher('franka_cmd_pos', Float64MultiArray, queue_size=1)
+        # define initial pose
+        y_offset = -4.5e-3  # 5-4.5e-3 = 0.5mm overlap
+        self.T_O_tar = np.array([[1.0, 0.0, 0.0, 0.43],
+                                 [0.0, -1.0, 0.0, 0.0 + 0 * y_offset],
+                                 [0.0, 0.0, -1.0, 0.15],
+                                 [0.0, 0.0, 0.0, 1.0]])
+        self.rate = rospy.Rate(1000)
+        self.doScanProcess()
 
+    def doScanProcess(self):
         print("connecting to OCT desktop ...")
         while self.T_O_ee is None or self.surf_height_ratio is None:
             # wait for messages are received
             if rospy.is_shutdown():
                 return
-
         print("robot state received \nconnection establised")
-
-        rate = rospy.Rate(1000)
-        T_O_tar = np.array([[1.0, 0.0, 0.0, 0.43],
-                            [0.0, -1.0, 0.0, 0.0 - 0 * 4.5e-3],  # -4.5e-3 -> 0.5mm overlap
-                            [0.0, 0.0, -1.0, 0.18],
-                            [0.0, 0.0, 0.0, 1.0]])
-
-        # go to entry pose
+        # ---------- go to entry pose ----------
         while not rospy.is_shutdown():
-            self.pos_msg.data = T_O_tar[:3, :4].transpose().flatten()
-            T_error = np.subtract(T_O_tar, self.T_O_ee)
+            self.pos_msg.data = self.T_O_tar[:3, :4].transpose().flatten()
+            T_error = np.subtract(self.T_O_tar, self.T_O_ee)
             trans_error = T_error[0:3, 3]
             rot_error = T_error[0:3, 0:3].flatten()
             isReachedTrans = True if sum(
@@ -63,35 +64,33 @@ class TranslationalScan():
             if isReachedRot and isReachedTrans:
                 print('reached entry pose')
                 break
-            pos_pub.publish(self.pos_msg)
-            rate.sleep()
-
-        # landing
+            self.pos_pub.publish(self.pos_msg)
+            self.rate.sleep()
+        # ---------- landing ----------
         while not rospy.is_shutdown():
             # vz = -kp*(desired_surf_height-surf_height_ratio)
-            self.vel_msg.data[2] = -0.001*(0.7-self.surf_height_ratio)
+            self.vel_msg.data[2] = -0.0015*(0.7-self.surf_height_ratio)
             if self.surf_height_ratio >= 0.7:
                 print('start scanning')
                 break
-            vel_pub.publish(self.vel_msg)
-            rate.sleep()
-
-        # scan
+            self.vel_pub.publish(self.vel_msg)
+            self.rate.sleep()
+        # ---------- scan ----------
         self.OCT_clk_ctrl_msg.data = 1
         while not rospy.is_shutdown():
-            OCT_clk_ctrl_pub.publish(self.OCT_clk_ctrl_msg)
-            vel_pub.publish(self.vel_msg)
-            self.vel_msg.data[0] = 0.00035  # [m/s]
-            self.vel_msg.data[2] = -2e-3*(0.7-self.surf_height_ratio)
-            if self.T_O_ee[0, 3] >= T_O_tar[0, 3] + 1.2e-2:  # 4e-2:
+            self.OCT_clk_ctrl_pub.publish(self.OCT_clk_ctrl_msg)
+            self.vel_pub.publish(self.vel_msg)
+            self.vel_msg.data[0] = 0.00032  # [m/s]
+            self.vel_msg.data[2] = -0.0023e-3*(0.7-self.surf_height_ratio)
+            if self.T_O_ee[0, 3] >= self.T_O_tar[0, 3] + 3.5e-2:
                 break
-            rate.sleep()
-
+            self.rate.sleep()
+        # ---------- clean up ----------
         print('finish scan')
         self.vel_msg.data = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         self.OCT_clk_ctrl_msg.data = 0
-        OCT_clk_ctrl_pub.publish(self.OCT_clk_ctrl_msg)
-        vel_pub.publish(self.vel_msg)
+        self.OCT_clk_ctrl_pub.publish(self.OCT_clk_ctrl_msg)
+        self.vel_pub.publish(self.vel_msg)
 
     def isArriveEntry(self):
         self.isContact = True
